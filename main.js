@@ -8,6 +8,7 @@
   const preloader = document.getElementById('preloader');
   const finishLoad = () => {
     document.body.classList.remove('is-loading');
+    document.body.classList.add('is-entered');
     if (preloader) preloader.classList.add('is-done');
   };
   if (preloader) {
@@ -17,7 +18,6 @@
       const elapsed = Date.now() - start;
       setTimeout(finishLoad, Math.max(0, minDelay - elapsed));
     });
-    // fallback in case load never fires cleanly
     setTimeout(finishLoad, 3500);
   }
 
@@ -49,143 +49,145 @@
     }
   }
 
-  /* ---------- active section nav link ---------- */
-  const navLinks = document.querySelectorAll('[data-navlink]');
-  if (navLinks.length) {
-    const sections = Array.from(navLinks)
-      .map(a => document.querySelector(a.getAttribute('href')))
-      .filter(Boolean);
-    const linkObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        const id = '#' + entry.target.id;
-        const link = document.querySelector(`[data-navlink][href="${id}"]`);
-        if (!link) return;
-        if (entry.isIntersecting) {
-          navLinks.forEach(l => l.classList.remove('is-active'));
-          link.classList.add('is-active');
-        }
-      });
-    }, { rootMargin: '-45% 0px -45% 0px' });
-    sections.forEach(s => linkObserver.observe(s));
-  }
-
-  /* ---------- custom cursor ---------- */
-  const cursor = document.getElementById('cursor');
-  if (cursor && hasFinePointer) {
-    let mx = 0, my = 0, cx = 0, cy = 0;
-    document.addEventListener('mousemove', (e) => {
-      mx = e.clientX; my = e.clientY;
-      cursor.classList.add('is-active');
-    });
-    const lerp = (a, b, n) => a + (b - a) * n;
-    const tick = () => {
-      cx = reduceMotion ? mx : lerp(cx, mx, 0.18);
-      cy = reduceMotion ? my : lerp(cy, my, 0.18);
-      cursor.style.transform = `translate(${cx}px, ${cy}px) translate(-50%, -50%)`;
-      requestAnimationFrame(tick);
-    };
-    tick();
-
-    document.querySelectorAll('.frame__visual').forEach(el => {
-      el.addEventListener('mouseenter', () => {
-        cursor.classList.add('is-view');
-        cursor.querySelector('span').textContent = 'VIEW';
-      });
-      el.addEventListener('mouseleave', () => cursor.classList.remove('is-view'));
-    });
-    document.querySelectorAll('a, button, .prod-row').forEach(el => {
-      el.addEventListener('mouseenter', () => cursor.classList.add('is-link'));
-      el.addEventListener('mouseleave', () => cursor.classList.remove('is-link'));
-    });
-  } else if (cursor) {
-    cursor.style.display = 'none';
-  }
-
-  /* ---------- scroll reveal ---------- */
-  const revealEls = document.querySelectorAll('[data-reveal]');
-  if (revealEls.length) {
-    const revealObserver = new IntersectionObserver((entries) => {
-      entries.forEach((entry, i) => {
-        if (entry.isIntersecting) {
-          entry.target.style.setProperty('--d', (i % 4) * 0.08 + 's');
-          entry.target.classList.add('is-visible');
-          revealObserver.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
-    revealEls.forEach(el => revealObserver.observe(el));
-  }
-
-  /* ---------- parallax on gallery frames ---------- */
-  const visuals = document.querySelectorAll('.frame__visual-inner');
-  if (visuals.length && !reduceMotion) {
-    let ticking = false;
-    const update = () => {
-      const vh = window.innerHeight;
-      visuals.forEach(v => {
-        const rect = v.parentElement.getBoundingClientRect();
-        const center = rect.top + rect.height / 2;
-        const offset = (center - vh / 2) / vh;
-        v.style.setProperty('translate', `0 ${offset * -22}px`);
-      });
-      ticking = false;
-    };
-    document.addEventListener('scroll', () => {
-      if (!ticking) {
-        requestAnimationFrame(update);
-        ticking = true;
-      }
-    }, { passive: true });
-    update();
-  }
-
-  /* ---------- stat count-up ---------- */
-  const statNums = document.querySelectorAll('[data-count]');
-  if (statNums.length) {
-    const animateCount = (el) => {
-      const target = parseInt(el.getAttribute('data-count'), 10);
-      if (reduceMotion || !target) { el.textContent = target; return; }
-      const duration = 1100;
-      const start = performance.now();
-      const easeOutQuint = t => 1 - Math.pow(1 - t, 5);
-      const step = (now) => {
-        const p = Math.min(1, (now - start) / duration);
-        el.textContent = Math.round(easeOutQuint(p) * target);
-        if (p < 1) requestAnimationFrame(step);
-      };
-      requestAnimationFrame(step);
-    };
-    const statObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          animateCount(entry.target);
-          statObserver.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.5 });
-    statNums.forEach(el => statObserver.observe(el));
-  }
-
-  /* ---------- FAQ accordion ---------- */
-  document.querySelectorAll('.faq-item').forEach(item => {
-    const btn = item.querySelector('.faq-item__q');
-    if (!btn) return;
-    btn.addEventListener('click', () => {
-      const isOpen = item.classList.contains('is-open');
-      item.closest('.faq').querySelectorAll('.faq-item').forEach(other => {
-        other.classList.remove('is-open');
-        other.querySelector('.faq-item__q').setAttribute('aria-expanded', 'false');
-      });
-      if (!isOpen) {
-        item.classList.add('is-open');
-        btn.setAttribute('aria-expanded', 'true');
-      }
+  /* ---------- page transition between pages ---------- */
+  document.querySelectorAll('a[href$=".html"], a[href*=".html#"]').forEach(a => {
+    const url = new URL(a.href, location.href);
+    if (url.origin !== location.origin) return;
+    a.addEventListener('click', (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || a.target === '_blank') return;
+      if (url.pathname === location.pathname && url.hash) return; // same-page anchor
+      e.preventDefault();
+      document.body.classList.add('is-leaving');
+      setTimeout(() => { location.href = a.href; }, reduceMotion ? 0 : 380);
     });
   });
 
+  /* ---------- init that needs the dynamic content already rendered ---------- */
+  function init() {
+    /* active section nav link */
+    const navLinks = document.querySelectorAll('[data-navlink]');
+    if (navLinks.length) {
+      const sections = Array.from(navLinks)
+        .map(a => document.querySelector(a.getAttribute('href')))
+        .filter(Boolean);
+      const linkObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          const id = '#' + entry.target.id;
+          const link = document.querySelector(`[data-navlink][href="${id}"]`);
+          if (!link) return;
+          if (entry.isIntersecting) {
+            navLinks.forEach(l => l.classList.remove('is-active'));
+            link.classList.add('is-active');
+          }
+        });
+      }, { rootMargin: '-45% 0px -45% 0px' });
+      sections.forEach(s => linkObserver.observe(s));
+    }
+
+    /* custom cursor */
+    const cursor = document.getElementById('cursor');
+    if (cursor && hasFinePointer) {
+      let mx = 0, my = 0, cx = 0, cy = 0;
+      document.addEventListener('mousemove', (e) => {
+        mx = e.clientX; my = e.clientY;
+        cursor.classList.add('is-active');
+      });
+      const lerp = (a, b, n) => a + (b - a) * n;
+      const tick = () => {
+        cx = reduceMotion ? mx : lerp(cx, mx, 0.18);
+        cy = reduceMotion ? my : lerp(cy, my, 0.18);
+        cursor.style.transform = `translate(${cx}px, ${cy}px) translate(-50%, -50%)`;
+        requestAnimationFrame(tick);
+      };
+      tick();
+
+      document.querySelectorAll('.frame__visual').forEach(el => {
+        el.addEventListener('mouseenter', () => {
+          cursor.classList.add('is-view');
+          cursor.querySelector('span').textContent = 'VIEW';
+        });
+        el.addEventListener('mouseleave', () => cursor.classList.remove('is-view'));
+      });
+      document.querySelectorAll('a, button, .founder-card').forEach(el => {
+        el.addEventListener('mouseenter', () => cursor.classList.add('is-link'));
+        el.addEventListener('mouseleave', () => cursor.classList.remove('is-link'));
+      });
+    } else if (cursor) {
+      cursor.style.display = 'none';
+    }
+
+    /* scroll reveal (elements + section dividers) */
+    const revealEls = document.querySelectorAll('[data-reveal], [data-reveal-line]');
+    if (revealEls.length) {
+      const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry, i) => {
+          if (entry.isIntersecting) {
+            entry.target.style.setProperty('--d', (i % 4) * 0.08 + 's');
+            entry.target.classList.add('is-visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
+      revealEls.forEach(el => revealObserver.observe(el));
+    }
+
+    /* parallax on gallery frames */
+    const visuals = document.querySelectorAll('.frame__visual-inner');
+    if (visuals.length && !reduceMotion) {
+      let ticking = false;
+      const update = () => {
+        const vh = window.innerHeight;
+        visuals.forEach(v => {
+          const rect = v.parentElement.getBoundingClientRect();
+          const center = rect.top + rect.height / 2;
+          const offset = (center - vh / 2) / vh;
+          v.style.setProperty('translate', `0 ${offset * -22}px`);
+        });
+        ticking = false;
+      };
+      document.addEventListener('scroll', () => {
+        if (!ticking) {
+          requestAnimationFrame(update);
+          ticking = true;
+        }
+      }, { passive: true });
+      update();
+    }
+
+    /* FAQ accordion (event delegation — survives re-renders) */
+    const faqRoot = document.querySelector('[data-faq-list]');
+    if (faqRoot) {
+      faqRoot.addEventListener('click', (e) => {
+        const btn = e.target.closest('.faq-item__q');
+        if (!btn) return;
+        const item = btn.closest('.faq-item');
+        const isOpen = item.classList.contains('is-open');
+        faqRoot.querySelectorAll('.faq-item').forEach(other => {
+          other.classList.remove('is-open');
+          other.querySelector('.faq-item__q').setAttribute('aria-expanded', 'false');
+        });
+        if (!isOpen) {
+          item.classList.add('is-open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      });
+    }
+  }
+
+  if (document.querySelector('script[src*="render.js"]')) {
+    // render.js may dispatch this twice — once with local/cached content so
+    // there's no blank flash, again if a shared backend upgrades the content.
+    // init() re-querying and re-observing each time is cheap and idempotent
+    // enough (the dynamic sections are always freshly rebuilt DOM nodes).
+    document.addEventListener('oe:rendered', init);
+  } else {
+    document.addEventListener('DOMContentLoaded', init);
+  }
+
   /* ---------- contact form ---------- */
-  const contactForm = document.getElementById('contactForm');
-  if (contactForm) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const contactForm = document.getElementById('contactForm');
+    if (!contactForm) return;
     const status = document.getElementById('formStatus');
     contactForm.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -205,6 +207,6 @@
         setTimeout(() => status.classList.remove('is-visible'), 5000);
       }, 700);
     });
-  }
+  });
 
 })();
